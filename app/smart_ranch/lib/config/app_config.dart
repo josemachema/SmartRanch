@@ -21,6 +21,10 @@ class AppConfig {
   static const double thiDanger = 79.0;
   static const double thiEmergency = 89.0;
 
+  // Firebase Realtime Database
+  static const String firebaseRtdbUrl = 'https://smartranch-innova-default-rtdb.firebaseio.com';
+  static const String firebaseTelemetryPath = '/telemetria/actual.json';
+
   // Update interval
   static const Duration chartUpdateInterval = Duration(seconds: 10);
 }

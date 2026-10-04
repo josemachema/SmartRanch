@@ -1,25 +1,56 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Theme for Smart Ranch (Supports Light and Dark Mode)
+/// Theme for Smart Ranch (Supports Light and Dark Mode, Light by default)
 class AppTheme {
   // --- Global Theme State ---
-  static bool isDark = true;
+  /// Global notifier for theme mode — defaults to Light Mode
+  static final ValueNotifier<ThemeMode> themeModeNotifier =
+      ValueNotifier<ThemeMode>(ThemeMode.light);
+
+  /// Current ThemeMode
+  static ThemeMode get currentThemeMode => themeModeNotifier.value;
+
+  /// Check whether current effective theme is dark
+  static bool get isDark {
+    if (themeModeNotifier.value == ThemeMode.system) {
+      return WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+          Brightness.dark;
+    }
+    return themeModeNotifier.value == ThemeMode.dark;
+  }
+
+  /// Setter for backwards-compatibility
+  static set isDark(bool value) {
+    setThemeMode(value ? ThemeMode.dark : ThemeMode.light);
+  }
+
+  /// Change theme mode explicitly
+  static void setThemeMode(ThemeMode mode) {
+    if (themeModeNotifier.value != mode) {
+      themeModeNotifier.value = mode;
+    }
+  }
+
+  /// Quick toggle between light and dark mode
+  static void toggleTheme() {
+    setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
+  }
 
   // --- Brand Colors ---
   static const Color primary = Color(0xFF619F49); // rgba(97, 159, 73)
   static const Color primaryDark = Color(0xFF4A7D37);
   static const Color secondary = Color(0xFFFF6D00); // Warm orange (alerts)
 
-  static Color get surface => isDark ? const Color(0xFF101010) : const Color(0xFFF9FAFB);
-  static Color get surfaceVariant => isDark ? const Color(0xFF181818) : const Color(0xFFF3F4F6);
+  static Color get surface => isDark ? const Color(0xFF101010) : const Color(0xFFFFFFFF);
+  static Color get surfaceVariant => isDark ? const Color(0xFF181818) : const Color(0xFFF1F5F9);
   static Color get card => isDark ? const Color(0xFF141414) : const Color(0xFFFFFFFF);
   static Color get cardBright => isDark ? const Color(0xFF222222) : const Color(0xFFF0FDF4);
-  static Color get background => isDark ? const Color(0xFF000000) : const Color(0xFFFFFFFF);
+  static Color get background => isDark ? const Color(0xFF000000) : const Color(0xFFF8FAFC);
   
-  static Color get textPrimary => isDark ? const Color(0xFFF0F0F5) : const Color(0xFF111827);
-  static Color get textSecondary => isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
-  static Color get divider => isDark ? const Color(0xFF333333) : const Color(0xFFE5E7EB);
+  static Color get textPrimary => isDark ? const Color(0xFFF0F0F5) : const Color(0xFF0F172A);
+  static Color get textSecondary => isDark ? const Color(0xFF9CA3AF) : const Color(0xFF64748B);
+  static Color get divider => isDark ? const Color(0xFF333333) : const Color(0xFFE2E8F0);
 
   // --- THI Level Colors ---
   static const Color thiNormal = Color(0xFF00C853);
@@ -62,11 +93,12 @@ class AppTheme {
 
   static ThemeData _buildTheme(Brightness brightness) {
     final bool isDarkTheme = brightness == Brightness.dark;
-    final bg = isDarkTheme ? const Color(0xFF000000) : const Color(0xFFFFFFFF);
-    final surf = isDarkTheme ? const Color(0xFF121212) : const Color(0xFFF9FAFB);
-    final txt = isDarkTheme ? const Color(0xFFF0F0F5) : const Color(0xFF111827);
-    final txtSec = isDarkTheme ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+    final bg = isDarkTheme ? const Color(0xFF000000) : const Color(0xFFF8FAFC);
+    final surf = isDarkTheme ? const Color(0xFF121212) : const Color(0xFFFFFFFF);
+    final txt = isDarkTheme ? const Color(0xFFF0F0F5) : const Color(0xFF0F172A);
+    final txtSec = isDarkTheme ? const Color(0xFF9CA3AF) : const Color(0xFF64748B);
     final cardCol = isDarkTheme ? const Color(0xFF1A1A1A) : const Color(0xFFFFFFFF);
+    final divCol = isDarkTheme ? const Color(0xFF333333) : const Color(0xFFE2E8F0);
 
     return ThemeData(
       useMaterial3: true,
@@ -81,6 +113,7 @@ class AppTheme {
         onPrimary: Colors.white,
         onSecondary: Colors.white,
         onSurface: txt,
+        outline: divCol,
       ),
       textTheme: GoogleFonts.interTextTheme(
         isDarkTheme ? ThemeData.dark().textTheme : ThemeData.light().textTheme
@@ -115,11 +148,35 @@ class AppTheme {
           ),
       cardTheme: CardThemeData(
         color: cardCol,
-        elevation: isDarkTheme ? 0 : 1,
+        elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: isDarkTheme ? BorderSide.none : const BorderSide(color: Color(0xFFE5E7EB)),
+          side: BorderSide(color: divCol),
         ),
+      ),
+      dividerTheme: DividerThemeData(
+        color: divCol,
+        thickness: 1,
+        space: 1,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: isDarkTheme ? const Color(0xFF181818) : const Color(0xFFFFFFFF),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: divCol),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: divCol),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(10)),
+          borderSide: BorderSide(color: primary, width: 1.5),
+        ),
+        labelStyle: TextStyle(color: txtSec, fontSize: 13),
+        hintStyle: TextStyle(color: txtSec.withAlpha(120), fontSize: 13),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: surf,

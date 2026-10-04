@@ -103,15 +103,42 @@ class _AnimalCardState extends State<AnimalCard> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          Text(
-                            reading.deviceId,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppTheme.textSecondary,
-                              fontFamily: 'monospace',
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  reading.deviceId,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppTheme.textSecondary,
+                                    fontFamily: 'monospace',
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Icon(
+                                reading.batteryPercent > 50
+                                    ? Icons.battery_full_rounded
+                                    : reading.batteryPercent > 20
+                                        ? Icons.battery_4_bar_rounded
+                                        : Icons.battery_alert_rounded,
+                                size: 12,
+                                color: reading.batteryPercent > 20
+                                    ? AppTheme.textSecondary
+                                    : AppTheme.thiDanger,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                '${reading.batteryPercent.round()}%',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -163,8 +190,10 @@ class _AnimalCardState extends State<AnimalCard> {
                     Expanded(
                       child: _StatChip(
                         icon: Icons.thermostat_rounded,
-                        label: '${reading.bodyTemp.toStringAsFixed(1)}°C',
-                        sublabel: 'T. Corporal',
+                        label: reading.bodyTemp > 10
+                            ? '${reading.bodyTemp.toStringAsFixed(1)}°C'
+                            : '38.5°C (Est.)',
+                        sublabel: reading.bodyTemp > 10 ? 'T. Corporal' : 'T. Corp (Est.)',
                         color: reading.bodyTemp > 40
                             ? AppTheme.thiDanger
                             : AppTheme.textSecondary,
@@ -196,8 +225,10 @@ class _AnimalCardState extends State<AnimalCard> {
                     Expanded(
                       child: _StatChip(
                         icon: Icons.directions_walk_rounded,
-                        label: reading.movementIntensity.toStringAsFixed(0),
-                        sublabel: 'Actividad',
+                        label: reading.movementIntensity > 0
+                            ? reading.movementIntensity.toStringAsFixed(0)
+                            : 'Reposo',
+                        sublabel: reading.movementIntensity <= 1 ? 'En Rumia' : 'Actividad',
                         color: reading.movementIntensity > 80
                             ? AppTheme.thiAlert
                             : AppTheme.textSecondary,

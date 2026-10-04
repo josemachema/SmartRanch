@@ -8,6 +8,8 @@
 .env.*.local
 *.pem
 *.key
+*firebase-adminsdk*.json
+*service-account*.json
 
 # --- Python ---
 __pycache__/

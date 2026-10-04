@@ -14,6 +14,7 @@ class MqttService extends ChangeNotifier {
   MqttClient? _client;
   bool _isConnected = false;
   String _statusMessage = 'Desconectado';
+  StreamSubscription? _updateSub;
 
   // Latest readings per device
   final Map<String, SensorReading> _latestReadings = {};
@@ -89,7 +90,8 @@ class MqttService extends ChangeNotifier {
     _client!.subscribe(AppConfig.alertTopicPattern, MqttQos.atLeastOnce);
 
     // Listen for messages
-    _client!.updates!.listen(_onMessage);
+    _updateSub?.cancel();
+    _updateSub = _client!.updates!.listen(_onMessage);
   }
 
   void _onDisconnected() {
@@ -152,6 +154,7 @@ class MqttService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _updateSub?.cancel();
     _telemetryController.close();
     _alertController.close();
     disconnect();

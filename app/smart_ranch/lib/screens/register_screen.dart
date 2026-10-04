@@ -581,7 +581,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               color: AppTheme.primary.withAlpha(45),
                               borderColor: AppTheme.primary,
                               borderStrokeWidth: 2.5,
-                              isFilled: true,
                             ),
                           ],
                         ),

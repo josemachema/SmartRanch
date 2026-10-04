@@ -20,9 +20,41 @@ class SanidadScreen extends StatefulWidget {
 class _SanidadScreenState extends State<SanidadScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  List<MedicalRecord> _records = [];
-  List<Map<String, dynamic>> _upcoming = [];
-  bool _isLoading = true;
+  List<MedicalRecord> _records = List.from(_demoRecords);
+  List<Map<String, dynamic>> _upcoming = [
+    {
+      'animal_id': 1,
+      'animal_name': 'Lupita',
+      'product_name': 'Pasturela bovina (Refuerzo)',
+      'type': 'vaccine',
+      'next_due_date': DateTime.now().add(const Duration(days: 4)).toIso8601String(),
+      'days_left': 4,
+    },
+    {
+      'animal_id': 2,
+      'animal_name': 'Estrella',
+      'product_name': 'Ivermectina 1% Desparasitante',
+      'type': 'deworming',
+      'next_due_date': DateTime.now().add(const Duration(days: 11)).toIso8601String(),
+      'days_left': 11,
+    },
+    {
+      'animal_id': 3,
+      'animal_name': 'Canela',
+      'product_name': 'Clostridiosis 8 Vías',
+      'type': 'vaccine',
+      'next_due_date': DateTime.now().add(const Duration(days: 25)).toIso8601String(),
+      'days_left': 25,
+    },
+    {
+      'animal_id': 5,
+      'animal_name': 'Valentina',
+      'product_name': 'Revisión Cicatrización Quirúrgica',
+      'type': 'surgery',
+      'next_due_date': DateTime.now().add(const Duration(days: 2)).toIso8601String(),
+      'days_left': 2,
+    },
+  ];
   Timer? _refreshTimer;
 
   static final _demoRecords = [
@@ -122,59 +154,24 @@ class _SanidadScreenState extends State<SanidadScreen>
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+    if (!mounted) return;
     try {
-      final records = await RanchApiService.getMedicalRecords();
-      final upcoming = await RanchApiService.getUpcomingMedical(days: 60);
+      final results = await Future.wait([
+        RanchApiService.getMedicalRecords(),
+        RanchApiService.getUpcomingMedical(days: 60),
+      ]).timeout(const Duration(milliseconds: 1200));
+
+      final records = results[0] as List<MedicalRecord>;
+      final upcoming = results[1] as List<Map<String, dynamic>>;
+
+      if (!mounted) return;
       setState(() {
-        _records = records.isNotEmpty ? records : _demoRecords;
-        _upcoming = upcoming.isNotEmpty ? upcoming : _getDefaultUpcoming();
-        _isLoading = false;
+        if (records.isNotEmpty) _records = records;
+        if (upcoming.isNotEmpty) _upcoming = upcoming;
       });
     } catch (_) {
-      setState(() {
-        _records = _demoRecords;
-        _upcoming = _getDefaultUpcoming();
-        _isLoading = false;
-      });
+      // Graceful fallback to default records without blocking the screen
     }
-  }
-
-  List<Map<String, dynamic>> _getDefaultUpcoming() {
-    return [
-      {
-        'animal_id': 1,
-        'animal_name': 'Lupita',
-        'product_name': 'Pasturela bovina (Refuerzo)',
-        'type': 'vaccine',
-        'next_due_date': DateTime.now().add(const Duration(days: 4)).toIso8601String(),
-        'days_left': 4,
-      },
-      {
-        'animal_id': 2,
-        'animal_name': 'Estrella',
-        'product_name': 'Ivermectina 1% Desparasitante',
-        'type': 'deworming',
-        'next_due_date': DateTime.now().add(const Duration(days: 11)).toIso8601String(),
-        'days_left': 11,
-      },
-      {
-        'animal_id': 3,
-        'animal_name': 'Canela',
-        'product_name': 'Clostridiosis 8 Vías',
-        'type': 'vaccine',
-        'next_due_date': DateTime.now().add(const Duration(days: 25)).toIso8601String(),
-        'days_left': 25,
-      },
-      {
-        'animal_id': 5,
-        'animal_name': 'Valentina',
-        'product_name': 'Revisión Cicatrización Quirúrgica',
-        'type': 'surgery',
-        'next_due_date': DateTime.now().add(const Duration(days: 2)).toIso8601String(),
-        'days_left': 2,
-      },
-    ];
   }
 
   void _checkDueDatesProgression() {
@@ -210,6 +207,8 @@ class _SanidadScreenState extends State<SanidadScreen>
       initialType: itemType,
     );
 
+    if (!mounted) return;
+
     if (saved == true) {
       setState(() {
         if (upcomingItem != null) {
@@ -218,6 +217,7 @@ class _SanidadScreenState extends State<SanidadScreen>
       });
 
       await _loadData();
+      if (!mounted) return;
 
       // Switch to the relevant tab
       if (itemType == 'deworming' || (prodName != null && prodName.toLowerCase().contains('ivermectina'))) {
@@ -242,6 +242,215 @@ class _SanidadScreenState extends State<SanidadScreen>
         );
       }
     }
+  }
+
+  void _showSonoraCalendarDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: AppTheme.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: AppTheme.divider),
+        ),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 580),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withAlpha(20),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.verified_user_rounded, color: AppTheme.primary, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Calendario Zoosanitario Sonora (SENASICA)',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          'Campañas oficiales obligatorias para estatus de Hato Libre',
+                          style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      _buildSonoraCampaignTile(
+                        ctx,
+                        title: 'Rabia Paralítica Bovina (Derriengue)',
+                        frequency: 'Semestral (Abril / Octubre)',
+                        description: 'Vacunación preventiva obligatoria en zonas con presencia del murciélago hematófago.',
+                        type: 'vaccine',
+                        product: 'Vacuna Derriengue Bovina',
+                      ),
+                      const SizedBox(height: 8),
+                      _buildSonoraCampaignTile(
+                        ctx,
+                        title: 'Brucelosis Bovina (Cepa RB51)',
+                        frequency: 'Becerros / Terneras de 3 a 8 meses',
+                        description: 'Inmunización única de hembras jóvenes para mantener zona libre de abortos infecciosos.',
+                        type: 'vaccine',
+                        product: 'Brucelosis RB51',
+                      ),
+                      const SizedBox(height: 8),
+                      _buildSonoraCampaignTile(
+                        ctx,
+                        title: 'Tuberculosis Bovina (Tuberculinización)',
+                        frequency: 'Anual (Obligatorio para Guía REEMO)',
+                        description: 'Prueba anocaudal por MVZ certificado requerida para movilización interestatal y rastro.',
+                        type: 'exam',
+                        product: 'Prueba Tuberculina PPD Bovina',
+                      ),
+                      const SizedBox(height: 8),
+                      _buildSonoraCampaignTile(
+                        ctx,
+                        title: 'Control de Garrapata Boophilus Microplus',
+                        frequency: 'Cada 21 a 30 días (Temporada Calurosa)',
+                        description: 'Baños de inmersión / aspersión con amitraz o cipermetrina para evitar babesiosis.',
+                        type: 'deworming',
+                        product: 'Baño Acaricida Antiparasitario',
+                      ),
+                      const SizedBox(height: 8),
+                      _buildSonoraCampaignTile(
+                        ctx,
+                        title: 'Clostridiosis 8 Vías (Carbón y Edema)',
+                        frequency: 'Anual (Antes de lluvias de verano)',
+                        description: 'Protección contra carbón sintomático, edema maligno y enterotoxemia en pastoreo.',
+                        type: 'vaccine',
+                        product: 'Bacterina Clostridial 8 Vías',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cerrar'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSonoraCampaignTile(
+    BuildContext ctx, {
+    required String title,
+    required String frequency,
+    required String description,
+    required String type,
+    required String product,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.divider),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.shield_outlined, color: AppTheme.primary, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withAlpha(20),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        frequency,
+                        style: const TextStyle(
+                          color: AppTheme.primary,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _openAddDialog(
+                        upcomingItem: {
+                          'product_name': product,
+                          'type': type,
+                        },
+                      );
+                    },
+                    icon: const Icon(Icons.add_task_rounded, size: 14),
+                    label: const Text('Programar en Ranura', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -277,11 +486,25 @@ class _SanidadScreenState extends State<SanidadScreen>
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      'Cálculo automático de refuerzos, cirugías y bitácora clínica',
+                      'Cálculo automático de refuerzos, retiros y bitácora clínica',
                       style: TextStyle(color: AppTheme.textSecondary, fontSize: 10),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: _showSonoraCalendarDialog,
+                icon: const Icon(Icons.shield_outlined, size: 15),
+                label: const Text('Campaña Sonora', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.primary,
+                  side: BorderSide(color: AppTheme.primary.withAlpha(120)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),
               const SizedBox(width: 8),
@@ -314,6 +537,8 @@ class _SanidadScreenState extends State<SanidadScreen>
                     children: [
                       _buildLiveScanPanel(healthAlerts, isMobile: true),
                       const SizedBox(height: 12),
+                      _buildWithdrawalTrackerCard(isMobile: true),
+                      const SizedBox(height: 12),
                       _buildUpcomingSideCard(isMobile: true),
                       const SizedBox(height: 12),
                       _buildRecordsPanel(isMobile: true),
@@ -324,13 +549,15 @@ class _SanidadScreenState extends State<SanidadScreen>
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // LEFT COLUMN: Live Scan Box on top, Upcoming Box below
+                  // LEFT COLUMN: Live Scan Box on top, Withdrawal & Upcoming Box below
                   SizedBox(
                     width: 320,
                     child: SingleChildScrollView(
                       child: Column(
                         children: [
                           _buildLiveScanPanel(healthAlerts, isMobile: false),
+                          const SizedBox(height: 12),
+                          _buildWithdrawalTrackerCard(isMobile: false),
                           const SizedBox(height: 12),
                           _buildUpcomingSideCard(isMobile: false),
                         ],
@@ -350,8 +577,11 @@ class _SanidadScreenState extends State<SanidadScreen>
     );
   }
 
-  /// Live Health Scanner Box (Collares IoT)
+  /// Live Health Scanner Box (Collares IoT) — shortened title to prevent overflow
   Widget _buildLiveScanPanel(Map<String, HealthAlert> alerts, {bool isMobile = false}) {
+    final readings = widget.demoService?.latestReadings ?? {};
+    final activeCollar = readings['Collar-SmartRanch'] ?? (readings.isNotEmpty ? readings.values.first : null);
+
     return Container(
       margin: isMobile
           ? const EdgeInsets.fromLTRB(12, 12, 12, 0)
@@ -376,7 +606,7 @@ class _SanidadScreenState extends State<SanidadScreen>
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Escaneo de Salud en Vivo (Collares IoT)',
+                    'Escáner Sanitario IoT',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
@@ -417,21 +647,158 @@ class _SanidadScreenState extends State<SanidadScreen>
           // Live Telemetry or Alert Items
           alerts.isEmpty
               ? Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.health_and_safety_rounded, size: 32, color: AppTheme.primary.withAlpha(90)),
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (activeCollar != null) ...[
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withAlpha(20),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Icon(Icons.sensors_rounded, size: 16, color: AppTheme.primary),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    activeCollar.animalName.isNotEmpty
+                                        ? activeCollar.animalName
+                                        : 'Vaca Collar 01',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    'Collar: ${activeCollar.deviceId}',
+                                    style: TextStyle(fontSize: 9.5, color: AppTheme.textSecondary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withAlpha(15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'Normotermia',
+                                style: const TextStyle(color: AppTheme.primary, fontSize: 9, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        // Vitals row
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.surface,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppTheme.divider),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.thermostat_rounded, size: 12, color: AppTheme.thiDanger),
+                                        const SizedBox(width: 4),
+                                        Text('MLX90614', style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      '${activeCollar.temperature.toStringAsFixed(1)}°C',
+                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                                    ),
+                                    Text('Temp. Corporal', style: TextStyle(fontSize: 8.5, color: AppTheme.textSecondary)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.surface,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppTheme.divider),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.directions_walk_rounded, size: 12, color: AppTheme.primary),
+                                        const SizedBox(width: 4),
+                                        Text('ADXL345', style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      '${activeCollar.movementIntensity.toStringAsFixed(2)}g',
+                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                                    ),
+                                    Text('Rumia / Actividad', style: TextStyle(fontSize: 8.5, color: AppTheme.textSecondary)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 8),
-                        Text('Sin anomalías de salud',
-                            style: TextStyle(fontSize: 12, color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 3),
-                        Text('Monitoreando temperatura, rumia y actividad en tiempo real',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.bolt_rounded, size: 12, color: AppTheme.primary),
+                                const SizedBox(width: 2),
+                                Text(
+                                  'Batería: ${activeCollar.batteryLevel}%',
+                                  style: TextStyle(fontSize: 9.5, color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              'RTDB Puerto Peñasco',
+                              style: TextStyle(fontSize: 9, color: AppTheme.textSecondary.withAlpha(150)),
+                            ),
+                          ],
+                        ),
+                      ] else ...[
+                        Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.health_and_safety_rounded, size: 28, color: AppTheme.primary.withAlpha(90)),
+                              const SizedBox(height: 6),
+                              Text('Sin anomalías de salud',
+                                  style: TextStyle(fontSize: 11.5, color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 2),
+                              Text('Monitoreo MLX90614 y ADXL345 activo',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(fontSize: 9.5, color: AppTheme.textSecondary)),
+                            ],
+                          ),
+                        ),
                       ],
-                    ),
+                    ],
                   ),
                 )
               : ListView(
@@ -501,6 +868,150 @@ class _SanidadScreenState extends State<SanidadScreen>
                     );
                   }).toList(),
                 ),
+        ],
+      ),
+    );
+  }
+
+  /// Semáforo de Tiempo de Retiro Farmacológico (Drug Withdrawal Tracker)
+  Widget _buildWithdrawalTrackerCard({bool isMobile = false}) {
+    final now = DateTime.now();
+    final withdrawalRecords = _records.where((r) => r.withdrawalDays > 0).toList();
+
+    return Container(
+      margin: isMobile
+          ? const EdgeInsets.symmetric(horizontal: 12)
+          : const EdgeInsets.fromLTRB(16, 0, 0, 0),
+      decoration: BoxDecoration(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: AppTheme.divider)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.timer_outlined, size: 16, color: AppTheme.thiAlert),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Tiempo de Retiro Farmacológico',
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: AppTheme.thiAlert.withAlpha(20),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '${withdrawalRecords.length}',
+                    style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: AppTheme.thiAlert),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (withdrawalRecords.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle_outline_rounded, size: 16, color: AppTheme.primary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Hato libre de periodos de retiro',
+                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 10.5),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(8),
+              itemCount: withdrawalRecords.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 6),
+              itemBuilder: (context, index) {
+                final rec = withdrawalRecords[index];
+                final recorded = rec.recordedAt ?? now;
+                final elapsed = now.difference(recorded).inDays;
+                final daysLeft = (rec.withdrawalDays - elapsed).clamp(0, 999);
+                final isInWithdrawal = daysLeft > 0;
+
+                return Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isInWithdrawal ? AppTheme.thiAlert.withAlpha(12) : AppTheme.primary.withAlpha(10),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isInWithdrawal ? AppTheme.thiAlert.withAlpha(50) : AppTheme.primary.withAlpha(40),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isInWithdrawal ? Icons.warning_amber_rounded : Icons.check_circle_rounded,
+                        size: 16,
+                        color: isInWithdrawal ? AppTheme.thiAlert : AppTheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              rec.productName ?? 'Antibiótico / Medicamento',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              isInWithdrawal
+                                  ? 'Vaca #${rec.animalId} • Restricción de leche y carne'
+                                  : 'Vaca #${rec.animalId} • Periodo finalizado',
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: isInWithdrawal ? AppTheme.thiAlert : AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isInWithdrawal ? AppTheme.thiAlert.withAlpha(25) : AppTheme.primary.withAlpha(20),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          isInWithdrawal ? '$daysLeft d restantes' : 'Liberada',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.bold,
+                            color: isInWithdrawal ? AppTheme.thiAlert : AppTheme.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
         ],
       ),
     );
@@ -623,19 +1134,17 @@ class _SanidadScreenState extends State<SanidadScreen>
 
   /// Medical Records Tabbed Panel
   Widget _buildRecordsPanel({bool isMobile = false}) {
-    final tabContent = _isLoading
-        ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
-        : TabBarView(
-            controller: _tabController,
-            children: [
-              _buildRecordsList('vaccine'),
-              _buildRecordsList('treatment'),
-              _buildRecordsList('deworming'),
-              _buildRecordsList('surgery'),
-              _buildUpcomingList(),
-              _buildHistoryList(),
-            ],
-          );
+    final tabContent = TabBarView(
+      controller: _tabController,
+      children: [
+        _buildRecordsList('vaccine'),
+        _buildRecordsList('treatment'),
+        _buildRecordsList('deworming'),
+        _buildRecordsList('surgery'),
+        _buildUpcomingList(),
+        _buildHistoryList(),
+      ],
+    );
 
     return Container(
       margin: isMobile
@@ -980,21 +1489,45 @@ class _SanidadScreenState extends State<SanidadScreen>
               ),
               if (record.withdrawalDays > 0) ...[
                 const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppTheme.thiAlert.withAlpha(20),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.warning_amber_rounded, size: 10, color: AppTheme.thiAlert),
-                      const SizedBox(width: 3),
-                      Text('Retiro: ${record.withdrawalDays} días',
-                          style: const TextStyle(color: AppTheme.thiAlert, fontSize: 10, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
+                Builder(
+                  builder: (context) {
+                    final recDate = record.recordedAt ?? DateTime.now();
+                    final elapsed = DateTime.now().difference(recDate).inDays;
+                    final daysLeft = (record.withdrawalDays - elapsed).clamp(0, 999);
+                    final isRestricted = daysLeft > 0;
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: isRestricted ? AppTheme.thiAlert.withAlpha(20) : AppTheme.primary.withAlpha(15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: isRestricted ? AppTheme.thiAlert.withAlpha(60) : AppTheme.primary.withAlpha(40),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isRestricted ? Icons.timer_outlined : Icons.check_circle_outline_rounded,
+                            size: 11,
+                            color: isRestricted ? AppTheme.thiAlert : AppTheme.primary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            isRestricted
+                                ? 'Retiro: $daysLeft días restantes (Total: ${record.withdrawalDays}d)'
+                                : 'Retiro cumplido (${record.withdrawalDays}d) — Apta',
+                            style: TextStyle(
+                              color: isRestricted ? AppTheme.thiAlert : AppTheme.primary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ],
               if (record.nextDueDate != null) ...[

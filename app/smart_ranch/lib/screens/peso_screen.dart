@@ -50,19 +50,24 @@ class _PesoScreenState extends State<PesoScreen> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final records = await RanchApiService.getWeightRecords();
+      if (!mounted) return;
       setState(() { _records = records; _isLoading = false; });
     } catch (_) {
+      if (!mounted) return;
       setState(() { _records = _demoRecords; _isLoading = false; });
     }
   }
 
   Future<void> _openWeightDialog({int? animalId}) async {
     final saved = await showAddWeightDialog(context, animalId: animalId);
+    if (!mounted) return;
     if (saved == true) {
       await _loadData();
+      if (!mounted) return;
       if (animalId != null) {
         setState(() => _selectedAnimalId = animalId);
       }

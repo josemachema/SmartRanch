@@ -305,8 +305,15 @@ class RanchApiService {
   static Future<void> deleteAnimal(int id) async {
     try {
       await _delete('/animals/$id');
-    } catch (_) {}
-    _localAnimals.removeWhere((a) => a.id == id);
+      _localAnimals.removeWhere((a) => a.id == id);
+    } catch (e) {
+      debugPrint('deleteAnimal API error: $e');
+      if (AuthService.isDemoMode) {
+        _localAnimals.removeWhere((a) => a.id == id);
+      } else {
+        rethrow;
+      }
+    }
   }
 
   static Future<Map<String, dynamic>> getAnimalFullProfile(int id) async {

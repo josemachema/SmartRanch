@@ -1,8 +1,11 @@
 import 'dart:math';
 import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 import 'package:flutter/foundation.dart';
 
+import '../config/app_config.dart';
 import '../models/sensor_reading.dart';
 import '../models/reproduction_alert.dart';
 import '../models/health_alert.dart';
@@ -15,6 +18,7 @@ import 'auth_service.dart';
 /// as well as real-time Cloud Firestore live telemetry streams.
 class DemoService extends ChangeNotifier {
   final List<_SimulatedAnimal> _animals = [
+    _SimulatedAnimal('Collar-SmartRanch', 'Vaca Collar IoT', false),
     _SimulatedAnimal('vaca_001', 'Lupita', false),
     _SimulatedAnimal('vaca_002', 'Estrella', false),
     _SimulatedAnimal('vaca_003', 'Canela', true), // starts stressed
@@ -42,7 +46,14 @@ class DemoService extends ChangeNotifier {
     'bebedero_03': 'Potrero Sur',
   };
 
+  // --- Collar Connection & Disconnection Watchdog ---
+  bool _isCollarSimulatedDisconnected = false;
+  final Map<String, DateTime> _collarLastSeen = {};
+  final Map<String, SensorReading> _lastKnownPositions = {};
+  DateTime? _lastCollarHeartbeat;
+
   Timer? _timer;
+  Timer? _rtdbTimer;
   bool _isRunning = false;
   final _random = Random();
   int _tickCount = 0;
@@ -50,6 +61,9 @@ class DemoService extends ChangeNotifier {
   StreamSubscription? _telemetrySub;
   StreamSubscription? _troughsSub;
   StreamSubscription? _alertsSub;
+
+  static final _collarReadingController = StreamController<SensorReading>.broadcast();
+  static Stream<SensorReading> get collarReadingStream => _collarReadingController.stream;
 
   Map<String, SensorReading> get latestReadings =>
       Map.unmodifiable(_latestReadings);
@@ -69,12 +83,76 @@ class DemoService extends ChangeNotifier {
   Map<String, TroughReading> get troughReadings =>
       Map.unmodifiable(_troughReadings);
 
-  /// Start generating simulated data or listening to real Firestore streams.
+  /// Collar connection state
+  bool get isCollarSimulatedDisconnected => _isCollarSimulatedDisconnected;
+  DateTime? get lastCollarHeartbeat => _lastCollarHeartbeat;
+
+  /// Check whether a collar is currently connected and actively transmitting.
+  bool isCollarOnline(String deviceId) {
+    if (_isCollarSimulatedDisconnected &&
+        (deviceId == 'Collar-SmartRanch' || deviceId.toLowerCase().contains('collar'))) {
+      return false;
+    }
+    final lastSeen = _collarLastSeen[deviceId] ?? _latestReadings[deviceId]?.timestamp;
+    if (lastSeen == null) return false;
+    return DateTime.now().difference(lastSeen).inMinutes < 10;
+  }
+
+  /// Time elapsed since last packet received from collar.
+  Duration? timeSinceLastCollarPacket(String deviceId) {
+    if (_isCollarSimulatedDisconnected &&
+        (deviceId == 'Collar-SmartRanch' || deviceId.toLowerCase().contains('collar'))) {
+      return const Duration(minutes: 24);
+    }
+    final lastSeen = _collarLastSeen[deviceId] ?? _latestReadings[deviceId]?.timestamp;
+    if (lastSeen == null) return null;
+    return DateTime.now().difference(lastSeen);
+  }
+
+  /// Retrieve the frozen Last Known Position (LKP) of a collar.
+  SensorReading? getLastKnownPosition(String deviceId) {
+    return _lastKnownPositions[deviceId] ?? _latestReadings[deviceId];
+  }
+
+  /// Toggle simulation of collar disconnection for testing contingencies and protocols.
+  void simulateCollarDisconnect(bool disconnected) {
+    _isCollarSimulatedDisconnected = disconnected;
+    if (disconnected) {
+      // Freeze LKP with a timestamp 24 min ago to simulate an out-of-range device
+      for (final devId in _latestReadings.keys) {
+        if (devId == 'Collar-SmartRanch' || devId.toLowerCase().contains('collar')) {
+          final current = _latestReadings[devId]!;
+          _lastKnownPositions[devId] = current;
+          final fakePastTime = DateTime.now().subtract(const Duration(minutes: 24));
+          _collarLastSeen[devId] = fakePastTime;
+          _latestReadings[devId] = current.copyWith(timestamp: fakePastTime);
+        }
+      }
+    } else {
+      _lastCollarHeartbeat = DateTime.now();
+      for (final devId in _latestReadings.keys) {
+        if (devId == 'Collar-SmartRanch' || devId.toLowerCase().contains('collar')) {
+          _collarLastSeen[devId] = DateTime.now();
+          final current = _latestReadings[devId]!;
+          _latestReadings[devId] = current.copyWith(timestamp: DateTime.now());
+        }
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Notify external UI components that ranch metadata or telemetry has changed.
+  void notifyStateChanged() {
+    notifyListeners();
+  }
+
+  /// Start generating simulated data or listening to real Firestore & Realtime DB streams.
   void start() {
     if (_isRunning) return;
     _isRunning = true;
 
     _initFirestoreListeners();
+    _initRealtimeDatabaseListener();
 
     if (AuthService.isDemoMode) {
       _generateReadings(); // initial
@@ -85,6 +163,79 @@ class DemoService extends ChangeNotifier {
         if (_tickCount % 12 == 0) _generateTroughReadings();
       });
     }
+    notifyListeners();
+  }
+
+  void _initRealtimeDatabaseListener() {
+    _fetchRtdbTelemetry();
+    _rtdbTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      _fetchRtdbTelemetry();
+    });
+  }
+
+  Future<void> _fetchRtdbTelemetry() async {
+    try {
+      final uri = Uri.parse('${AppConfig.firebaseRtdbUrl}${AppConfig.firebaseTelemetryPath}');
+      final res = await http.get(uri).timeout(const Duration(seconds: 3));
+      if (res.statusCode == 200 && res.body.isNotEmpty && res.body != 'null') {
+        final data = json.decode(res.body);
+        if (data is Map<String, dynamic> && data.containsKey('dispositivo')) {
+          final reading = SensorReading.fromCollarJson(data);
+          _applyLiveCollarReading(reading);
+        }
+      }
+    } catch (_) {
+      // Silent error ignore on temporary network drops
+    }
+  }
+
+  void _applyLiveCollarReading(SensorReading reading) {
+    if (_isCollarSimulatedDisconnected &&
+        (reading.deviceId == 'Collar-SmartRanch' || reading.deviceId.toLowerCase().contains('collar'))) {
+      // Retain frozen LKP while user tests disconnected state
+      return;
+    }
+
+    _lastCollarHeartbeat = DateTime.now();
+    _collarLastSeen[reading.deviceId] = DateTime.now();
+
+    SensorReading effectiveReading = reading;
+    final existing = _latestReadings[reading.deviceId];
+    if (existing != null) {
+      // If incoming reading temporarily lacks GPS fix (e.g. searching or indoors),
+      // preserve the last known GPS position and satellite metrics.
+      if (effectiveReading.latitude == null && existing.latitude != null) {
+        effectiveReading = effectiveReading.copyWith(
+          latitude: existing.latitude,
+          longitude: existing.longitude,
+          speed: existing.speed,
+          satellites: existing.satellites,
+        );
+      }
+    }
+
+    _lastKnownPositions[effectiveReading.deviceId] = effectiveReading;
+    _latestReadings[effectiveReading.deviceId] = effectiveReading;
+
+    final history = _readingHistory.putIfAbsent(effectiveReading.deviceId, () => []);
+    history.add(effectiveReading);
+    if (history.length > _maxHistory) history.removeAt(0);
+
+    // Health alert check
+    if (effectiveReading.healthStatus != 'healthy') {
+      _activeHealthAlerts[effectiveReading.deviceId] = HealthAlert(
+        deviceId: effectiveReading.deviceId,
+        animalName: effectiveReading.animalName.isNotEmpty ? effectiveReading.animalName : effectiveReading.deviceId,
+        type: effectiveReading.healthStatus,
+        bodyTemp: effectiveReading.bodyTemp,
+        movementIntensity: effectiveReading.movementIntensity,
+        detectedAt: effectiveReading.timestamp,
+      );
+    } else {
+      _activeHealthAlerts.remove(effectiveReading.deviceId);
+    }
+
+    _collarReadingController.add(effectiveReading);
     notifyListeners();
   }
 
@@ -139,11 +290,18 @@ class DemoService extends ChangeNotifier {
 
   void stop() {
     _timer?.cancel();
+    _rtdbTimer?.cancel();
     _telemetrySub?.cancel();
     _troughsSub?.cancel();
     _alertsSub?.cancel();
     _isRunning = false;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    stop();
+    super.dispose();
   }
 
   void _generateReadings() {
@@ -243,6 +401,7 @@ class DemoService extends ChangeNotifier {
       final healthStatus = animal.healthState;
 
       final batteryMap = {
+        'Collar-SmartRanch': (92.0, 4.10),
         'vaca_001': (94.0, 4.15),
         'vaca_002': (88.0, 4.05),
         'vaca_003': (76.0, 3.92),
@@ -250,6 +409,18 @@ class DemoService extends ChangeNotifier {
         'vaca_005': (62.0, 3.78),
       };
       final batData = batteryMap[animal.id] ?? (85.0, 4.0);
+
+      final gpsOffsets = {
+        'Collar-SmartRanch': (31.3012, -113.5320),
+        'vaca_001': (31.3035, -113.5290),
+        'vaca_002': (31.2990, -113.5345),
+        'vaca_003': (31.3050, -113.5360),
+        'vaca_004': (31.2980, -113.5280),
+        'vaca_005': (31.3025, -113.5380),
+      };
+      final baseGps = gpsOffsets[animal.id] ?? (31.3012, -113.5320);
+      final lat = baseGps.$1 + (_random.nextDouble() - 0.5) * 0.0008;
+      final lng = baseGps.$2 + (_random.nextDouble() - 0.5) * 0.0008;
 
       final reading = SensorReading(
         deviceId: animal.id,
@@ -273,9 +444,14 @@ class DemoService extends ChangeNotifier {
         healthStatus: healthStatus,
         batteryPercent: batData.$1,
         batteryVoltage: batData.$2,
+        latitude: lat,
+        longitude: lng,
+        satellites: 8,
       );
 
       _latestReadings[animal.id] = reading;
+      _collarLastSeen[animal.id] = reading.timestamp;
+      _lastKnownPositions[animal.id] = reading;
       _readingHistory.putIfAbsent(animal.id, () => []);
       _readingHistory[animal.id]!.add(reading);
       if (_readingHistory[animal.id]!.length > _maxHistory) {
@@ -302,12 +478,6 @@ class DemoService extends ChangeNotifier {
       }
     }
     notifyListeners();
-  }
-
-  @override
-  void dispose() {
-    stop();
-    super.dispose();
   }
 
   void _generateTroughReadings() {
@@ -338,6 +508,40 @@ class DemoService extends ChangeNotifier {
         distanceCm: double.parse(distanceCm.toStringAsFixed(1)),
         tankDepthCm: 100,
       );
+    }
+  }
+
+  /// Manually add or update a trough reading
+  void addOrUpdateTrough(TroughReading trough) {
+    _troughReadings[trough.troughId] = trough;
+    notifyListeners();
+  }
+
+  /// Trigger a refill event for a specific trough (e.g. activating pump or float valve)
+  void refillTrough(String troughId) {
+    final existing = _troughReadings[troughId];
+    if (existing != null) {
+      _troughReadings[troughId] = existing.copyWith(
+        levelPercent: 96.0,
+        distanceCm: 4.0,
+        timestamp: DateTime.now(),
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Calibrate sensor offset for a specific trough
+  void calibrateTrough(String troughId, double offsetCm) {
+    final existing = _troughReadings[troughId];
+    if (existing != null) {
+      final newDist = (existing.distanceCm + offsetCm).clamp(2.0, existing.tankDepthCm);
+      final newPct = ((existing.tankDepthCm - newDist) / existing.tankDepthCm * 100.0).clamp(0.0, 100.0);
+      _troughReadings[troughId] = existing.copyWith(
+        distanceCm: double.parse(newDist.toStringAsFixed(1)),
+        levelPercent: double.parse(newPct.toStringAsFixed(1)),
+        timestamp: DateTime.now(),
+      );
+      notifyListeners();
     }
   }
 }

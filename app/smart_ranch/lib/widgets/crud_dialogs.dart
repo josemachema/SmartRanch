@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../config/app_theme.dart';
-import '../models/ranch_models.dart';
 import '../services/ranch_api_service.dart';
 import 'nfc_scanner_dialog.dart';
 
@@ -217,8 +216,8 @@ Future<bool> showAddAnimalDialog(BuildContext context) async {
                         });
                         if (ctx.mounted) Navigator.pop(ctx, true);
                       } catch (e) {
-                        setState(() => loading = false);
                         if (ctx.mounted) {
+                          setState(() => loading = false);
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.thiDanger),
                           );
@@ -261,7 +260,6 @@ Future<bool> showAddMedicalDialog(BuildContext context, {int? animalId, String? 
   final animalIdCtrl = TextEditingController(text: animalId?.toString() ?? '1');
   final withdrawalCtrl = TextEditingController(text: '0');
   DateTime nextDueDate = DateTime.now().add(Duration(days: recordType == 'deworming' ? 90 : 180));
-  bool scheduleBooster = true;
   bool loading = false;
 
   final result = await showDialog<bool>(
@@ -304,7 +302,7 @@ Future<bool> showAddMedicalDialog(BuildContext context, {int? animalId, String? 
 
                 _sectionTitle('TIPO DE TRATAMIENTO'),
                 DropdownButtonFormField<String>(
-                  value: recordType,
+                  initialValue: recordType,
                   dropdownColor: AppTheme.card,
                   isExpanded: true,
                   style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
@@ -482,8 +480,8 @@ Future<bool> showAddMedicalDialog(BuildContext context, {int? animalId, String? 
                         });
                         if (ctx.mounted) Navigator.pop(ctx, true);
                       } catch (e) {
-                        setState(() => loading = false);
                         if (ctx.mounted) {
+                          setState(() => loading = false);
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.thiDanger));
                         }
@@ -556,7 +554,6 @@ Future<bool> showAddReproductiveDialog(BuildContext context, {int? animalId, Str
   final notesCtrl = TextEditingController();
 
   String eventType = defaultType ?? 'artificial_insemination';
-  DateTime serviceDate = DateTime.now();
   // Bovine gestation = 283 days
   DateTime expectedDeliveryDate = DateTime.now().add(const Duration(days: 283));
   bool pregnancyConfirmed = true;
@@ -564,7 +561,6 @@ Future<bool> showAddReproductiveDialog(BuildContext context, {int? animalId, Str
   bool loading = false;
 
   void updateExpectedDelivery(DateTime date) {
-    serviceDate = date;
     expectedDeliveryDate = date.add(const Duration(days: 283));
   }
 
@@ -608,7 +604,7 @@ Future<bool> showAddReproductiveDialog(BuildContext context, {int? animalId, Str
 
                 _sectionTitle('TIPO DE EVENTO'),
                 DropdownButtonFormField<String>(
-                  value: eventType,
+                  initialValue: eventType,
                   dropdownColor: AppTheme.card,
                   isExpanded: true,
                   style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
@@ -722,7 +718,7 @@ Future<bool> showAddReproductiveDialog(BuildContext context, {int? animalId, Str
                     children: [
                       Expanded(
                         child: DropdownButtonFormField<bool>(
-                          value: pregnancyConfirmed,
+                          initialValue: pregnancyConfirmed,
                           dropdownColor: AppTheme.card,
                           style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
                           decoration: _inputDecoration('Resultado Palpación'),
@@ -787,7 +783,7 @@ Future<bool> showAddReproductiveDialog(BuildContext context, {int? animalId, Str
                     children: [
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          value: calfSex,
+                          initialValue: calfSex,
                           dropdownColor: AppTheme.card,
                           style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
                           decoration: _inputDecoration('Sexo de la Cría'),
@@ -839,8 +835,8 @@ Future<bool> showAddReproductiveDialog(BuildContext context, {int? animalId, Str
                         });
                         if (ctx.mounted) Navigator.pop(ctx, true);
                       } catch (e) {
-                        setState(() => loading = false);
                         if (ctx.mounted) {
+                          setState(() => loading = false);
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.thiDanger));
                         }
@@ -945,8 +941,8 @@ Future<bool> showAddWeightDialog(BuildContext context, {int? animalId}) async {
                       });
                       if (ctx.mounted) Navigator.pop(ctx, true);
                     } catch (e) {
-                      setState(() => loading = false);
                       if (ctx.mounted) {
+                        setState(() => loading = false);
                         ScaffoldMessenger.of(ctx).showSnackBar(
                           SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.thiDanger));
                       }
@@ -1072,8 +1068,8 @@ Future<bool> showAddFinancialDialog(BuildContext context) async {
                         });
                         if (ctx.mounted) Navigator.pop(ctx, true);
                       } catch (e) {
-                        setState(() => loading = false);
                         if (ctx.mounted) {
+                          setState(() => loading = false);
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.thiDanger));
                         }
